@@ -27,6 +27,7 @@
 #define NUM_LEDS                         4
 #define DATA_PIN                        23
 #define CLOCK_PIN                       18
+#define N                               42
 
 
 #define STATE_SLEEP                       0
@@ -111,14 +112,18 @@ void loop()
     {
         case STATE_SLEEP:
             data = ""; 
-            for(i = 0; (i < 42); i++) 
+            batteryLevel = 0;
+            for(i = 0; (i < N); i++) 
             {   
-                for(j = 42 - i; (j > 0); j--) printf("z");
+                for(j = N - i; (j > 0); j--) printf("z");
                 printf(" press ESC to wake me up and wait!    "); 
                 for(j = 0;      (j < i); j++) printf("z");
                 printf("\r");
-                delay(100); // Timer Interrupt is switched off! (sleeping!)
+                batteryLevel += analogRead(BATTERY_LEVEL) / REFV;
+                delay(60);
             }           
+            batteryLevel /= N; 
+
             if (Serial.available() > 0) {
                 data = Serial.readString();
                 data.trim();
@@ -126,8 +131,8 @@ void loop()
             }
             if (data[0] != ESC)
             {
-                batteryLevel = analogRead(BATTERY_LEVEL) / REFV;
-                printf("battery: %1.2f\n", batteryLevel);
+//                batteryLevel = analogRead(BATTERY_LEVEL) / REFV;
+                printf("battery:%1.3fV\n", batteryLevel);
                 enterDeepSleep();
             }    
             else
@@ -153,7 +158,8 @@ void loop()
     if (flag)
     {
         flag = 0; 
-        printf("robART25 vL= %03d vR = %03d\n", vL, vR);
+        batteryLevel += analogRead(BATTERY_LEVEL) / REFV;
+        printf("robART25 vL= %03d vR = %03d battery: %1.3fV\n", vL, vR, batteryLevel);
     }
 
     if (Serial.available() > 0) {
