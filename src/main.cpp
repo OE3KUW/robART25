@@ -158,7 +158,7 @@ void loop()
     if (flag)
     {
         flag = 0; 
-        batteryLevel += analogRead(BATTERY_LEVEL) / REFV;
+        batteryLevel = analogRead(BATTERY_LEVEL) / REFV;
         printf("robART25 vL= %03d vR = %03d battery: %1.3fV\n", vL, vR, batteryLevel);
     }
 
