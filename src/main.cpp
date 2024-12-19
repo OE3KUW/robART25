@@ -21,19 +21,24 @@
 #define BATTERY_LEVEL                   A3   // GPIO 39
 #define REFV                           685.0 // factor
 #define DEEP_SLEEP_DURATION           10e6   // 10 Sekunden in Mikrosekunden
+
 #define EEPROM_SIZE                    100
-#define EEPROM_STATE                     0
+#define EEPROM_ADDR                      0
+#define EEPROM_STATE                     0 
+#define EEPROM_MOTOR_SYS_ADDR           10
+#define EEPROM_SSID_ADDR                20
+#define EEPROM_PASSWORD_ADDR            60
+
 #define ESC                             27
 #define NUM_LEDS                         4
 #define DATA_PIN                        23
 #define CLOCK_PIN                       18
 #define N                               42
 
-
-#define STATE_SLEEP                       0
-#define STATE_START                       1
-#define STATE_DRIVE                       2
-#define STATE_MAX                         3
+#define STATE_SLEEP                      0
+#define STATE_START                      1
+#define STATE_DRIVE                      2
+#define STATE_MAX                        3
 
 
 void IRAM_ATTR myTimer(void);
@@ -42,7 +47,20 @@ void enterDeepSleep();
 volatile int flag; 
 volatile int state; 
 volatile int vL, vR;
+volatile int LDir;
+volatile int RDir;
 volatile float batteryLevel = 0.;
+volatile int deltaT = 0;
+
+String receivedText       = ""; // string buffer
+String ssidFromEEPROM     = "";
+String passwordFromEEPROM = "";
+String motorSysFromEEPROM = "";
+String receivedWord       = "";
+
+volatile int motorSys = 0;
+
+
 hw_timer_t *timer = NULL;
 CRGB leds[NUM_LEDS];
 
@@ -68,6 +86,12 @@ void setup()
     digitalWrite(WHEEL_R, LOW); // stop !
 
     vR = vL = 0;
+    
+    LDir = 0;
+    RDir = 1;
+
+
+
 
     timer = timerBegin(0, 80, true);
     timerAttachInterrupt(timer, &myTimer, true);
@@ -97,6 +121,18 @@ void setup()
     
     if (state > STATE_MAX) state = STATE_START;
 
+    ssidFromEEPROM = readFromEEPROM(EEPROM_SSID_ADDR);
+    printf("im EEPROM gefunden: .%s.\n", ssidFromEEPROM);
+    passwordFromEEPROM = readFromEEPROM(EEPROM_PASSWORD_ADDR);
+    printf("im PASSWORD gefunden: .%s.\n", passwordFromEEPROM);
+    motorSysFromEEPROM = readFromEEPROM(EEPROM_MOTOR_SYS_ADDR);
+    motorSys = (char)motorSysFromEEPROM[0] - '0';
+    
+    printf("MotorSystem: .%d.\n", motorSys);
+    printf("battery level: %f\n", batteryLevel);
+//    printf("SSID: .%s.\n", ssidFromEEPROM);
+//    printf("PWD: .%s.\n", passwordFromEEPROM);
+
 
     printf("-----Don't forget to set the cursor in the monitor window----------\n");
 }  
@@ -107,6 +143,8 @@ void loop()
     char c;
     int i, j;
     String data;
+    int startIndex, endIndex;
+
     
     switch (state)
     {
@@ -145,8 +183,8 @@ void loop()
             }
         break;
         case STATE_START:
-             printf("!stART!\n");
-             printf("To enter sleep mode, write 'sleep' via U-ART!\n");
+             printf("\n!stART!\n\n");
+             printf("To enter sleep mode, write SLEEP via U-ART!\n");
              printf("First, set the cursor in the monitor window!\n");
              vL = vR = 0;
              state = STATE_DRIVE;
@@ -159,45 +197,105 @@ void loop()
     {
         flag = 0; 
         batteryLevel = analogRead(BATTERY_LEVEL) / REFV;
-        printf("robART25 vL= %03d vR = %03d battery: %1.3fV\n", vL, vR, batteryLevel);
+//###     printf("robART25 vL= %03d vR = %03d battery: %1.3fV\n", vL, vR, batteryLevel);
     }
 
-    if (Serial.available() > 0) {
-        String data = Serial.readString();
-        data.trim();
+// add sleep!
+    while (Serial.available() > 0) 
+    {
+        char receivedChar = Serial.read(); // Einzelnes Zeichen lesen
 
-        printf("Received: '%s' %d\n", data, data[0]);  // Debugging-Ausgabe
-
-        if (data == "sleep") {
-            Serial.println(" z z z \n");
-            state = STATE_SLEEP;
-            EEPROM.write(EEPROM_STATE, state);
-            EEPROM.commit();  // Änderungen speichern
-            enterDeepSleep();
-        }
-
-        if (data[0] == 'x')
+        // Wenn ein Zeilenumbruch empfangen wird: Ausgabe und Text zurücksetzen
+        if (receivedChar == '\n') 
         {
-            // x received
-            flag = TRUE;
-            printf("x received!\n");
-          
-            led ^= 1; // toggle
-            digitalWrite(ON_BOARD_LED, led);
-
-            if (led)
+            Serial.println("Empfangene Daten: ." + receivedText); 
+            receivedText = ""; // Textfeld zurücksetzen
+        } 
+        else 
+        {
+            receivedText += receivedChar; // Zeichen an das Textfeld anhängen
+            receivedText.trim(); // Leerzeichen am Anfang und am Ende werden 
+                                 // entfernt
+            startIndex = 0; 
+            startIndex = receivedText.indexOf("\"ssid\":\"");
+                //"ssid":"   das sind 8 Zeichen!
+            if (startIndex != -1)
             {
-                vL = vR = 100;
-            }
-            else
-            {
-                vL = vR = 0;
+                startIndex += 8;
+                endIndex = receivedText.indexOf("\"", startIndex);
+                
+                if (endIndex != -1)
+                {
+                    receivedWord = receivedText.substring(startIndex, endIndex);
+                    printf("\nUserWort erkannt .%s.", receivedWord);
+                    store2EEPROM(receivedWord, EEPROM_SSID_ADDR);
+                }
             }
 
+            startIndex = receivedText.indexOf("\"password\":\"");
+                //"password":"   das sind 12 Zeichen!
+            if (startIndex != -1)
+            {
+                startIndex += 12;
+                endIndex = receivedText.indexOf("\"", startIndex);
+            
+                if (endIndex != -1)
+                {
+                    receivedWord = receivedText.substring(startIndex, endIndex);
+                    printf("\nPassword erkannt .%s.", receivedWord);
+                    store2EEPROM(receivedWord, EEPROM_PASSWORD_ADDR);
+                }
+            }
+
+
+            startIndex = receivedText.indexOf("\"motor-system\":\"");
+                //"motor-system":"   das sind 15 Zeichen!
+            if (startIndex != -1)
+            {
+                startIndex += 16; // wegen dem '-' Zeichen ? 
+                endIndex = receivedText.indexOf("\"", startIndex);
+            
+                if (endIndex != -1)
+                {
+                    receivedWord = receivedText.substring(startIndex, endIndex);
+                    printf("\nMotorsystem erkannt .%s.", receivedWord);
+                    store2EEPROM(receivedWord, EEPROM_MOTOR_SYS_ADDR);
+                }
+            }
+
+            if (receivedText == "SYS") 
+            {
+                printf("MotorSystem: .%d.\n", motorSys);
+                printf("battery level: %f\n", batteryLevel);
+                printf("SSID: .%s.\n", ssidFromEEPROM);
+                printf("PWD: .%s.\n", passwordFromEEPROM);
+                deltaT = 200; 
+                while(deltaT);
+                printf(".\n");
+
+            }
+
+
+            if (receivedText == "RESET") 
+            {
+                printf("----> Reboot!\n");
+                deltaT = 200; 
+                while(deltaT);
+                ESP.restart(); // Neustart des ESP32
+            }
+            if (receivedText == "SLEEP") 
+            {
+                printf(" z z z \n");
+                state = STATE_SLEEP;
+                EEPROM.write(EEPROM_STATE, state);
+                EEPROM.commit();  // Änderungen speichern
+                enterDeepSleep();
+            }
         }
     }
-
 }
+
+
 
 /// @brief The systems reduces all current cunsumtion to a minimum!
 void enterDeepSleep() {
@@ -245,18 +343,32 @@ void IRAM_ATTR myTimer(void)
     count++;
     ramp++;
 
-    dacWrite(DAC, ramp);
+    // dacWrite(DAC, ramp);
+
+    if (deltaT) deltaT--;
 
     if (count >= WAIT_ONE_SEC) 
     {
+
         flag = TRUE;
         count = 0;
     }
 
 
-    // PWM:
 
-    if (ramp >= vL) digitalWrite(WHEEL_L, LOW);  else digitalWrite(WHEEL_L, HIGH);
-    if (ramp >= vR) digitalWrite(WHEEL_R, LOW);  else digitalWrite(WHEEL_R, HIGH);
+ // PWM:
+    if (motorSys == 0) 
+    {
+        if (ramp > vL) digitalWrite(WHEEL_L, LOW);  else digitalWrite(WHEEL_L, HIGH);
+        if (ramp > vR) digitalWrite(WHEEL_R, LOW);  else digitalWrite(WHEEL_R, HIGH);
+    }
+    if (motorSys == 1)
+    { 
+        if (LDir) if (ramp < vL) digitalWrite(WHEEL_L, LOW);  else digitalWrite(WHEEL_L, HIGH);
+        else      if (ramp > vL) digitalWrite(WHEEL_L, LOW);  else digitalWrite(WHEEL_L, HIGH);
 
+        if (RDir) if (ramp < vR) digitalWrite(WHEEL_R, LOW);  else digitalWrite(WHEEL_R, HIGH);
+        else      if (ramp > vR) digitalWrite(WHEEL_R, LOW);  else digitalWrite(WHEEL_R, HIGH);
+
+    }
 }
