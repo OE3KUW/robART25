@@ -292,6 +292,56 @@ void loop()
                 }
             }
 
+            if (receivedText == "advent") 
+            {
+                deltaT = 20000; 
+                while(deltaT);
+                printf("1\n");
+
+                leds[0] = CRGB{255, 0, 0}; // R B G
+                leds[1] = CRGB{0, 0, 0};
+                leds[2] = CRGB{0, 0, 0};
+                leds[3] = CRGB{0, 0, 0};
+
+                FastLED.show();
+
+                deltaT = 20000; 
+                while(deltaT);
+                printf("2\n");
+
+                leds[0] = CRGB{255, 0, 0}; // R B G
+                leds[1] = CRGB{0, 255, 0};
+                leds[2] = CRGB{0, 0, 0};
+                leds[3] = CRGB{0, 0, 0};
+
+                FastLED.show();
+
+                deltaT = 20000; 
+                while(deltaT);
+                printf("3\n");
+
+                leds[0] = CRGB{255, 0, 0}; // R B G
+                leds[1] = CRGB{0, 255, 0};
+                leds[2] = CRGB{0, 0, 255};
+                leds[3] = CRGB{0, 0, 0};
+
+                FastLED.show();
+
+                deltaT = 20000; 
+                while(deltaT);
+                printf("4\n");
+
+                leds[0] = CRGB{255, 0, 0}; // R B G
+                leds[1] = CRGB{0, 255, 0};
+                leds[2] = CRGB{0, 0, 255};
+                leds[3] = CRGB{255, 255, 0}; // MAGENTA
+
+                FastLED.show();
+
+
+
+            }
+
             if (receivedText == "SYS") 
             {
                 printf("MotorSystem: .%d.\n", motorSys);
