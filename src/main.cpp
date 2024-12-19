@@ -1,8 +1,9 @@
 /**************************************************************************************
                                                               
                                 r o b A R T 2 5
-                                                                                 
- 3xHELS 24/25                                                              қuran 2025
+                                                                                  
+ 3xHELS 24/25                                                              grubär 2025
+
 **************************************************************************************/
 #include <Arduino.h>
 #include <EEPROM.h>
@@ -11,7 +12,8 @@
 
 #define TRUE                             1
 #define FALSE                            0
-#define WAIT_ONE_SEC                 10000
+#define WAIT_ONE_SEC                     10000
+
 #define ON_BOARD_LED                     5
 #define DAC                             25   // Trig
 #define WHEEL_L                          2
@@ -20,6 +22,9 @@
 #define WHEEL_R_DIRECTION               A5
 #define BATTERY_LEVEL                   A3   // GPIO 39
 #define REFV                           685.0 // factor
+#define DEEP_SLEEP_DURATION             10e6   // 10 Sekunden in Mikrosekunden
+#define EEPROM_SIZE                     100
+#define EEPROM_STATE                    0
 #define DEEP_SLEEP_DURATION           10e6   // 10 Sekunden in Mikrosekunden
 #define EEPROM_SIZE                    100
 #define EEPROM_STATE                     0
@@ -28,6 +33,20 @@
 #define DATA_PIN                        23
 #define CLOCK_PIN                       18
 #define N                               42
+#define ADC                             39
+#define BATTERY_LOW                    2800
+
+
+#define STATE_SLEEP                      0
+#define STATE_START                      1
+#define STATE_DRIVE                      2
+#define STATE_MAX                        3
+
+
+void IRAM_ATTR myTimer(void);  // Deklaration der Funktion
+void batteryCheck();  // Deklaration der Funktion
+void enterDeepSleep();  // Deklaration der Funktion
+
 
 
 #define STATE_SLEEP                       0
@@ -43,6 +62,7 @@ volatile int flag;
 volatile int state; 
 volatile int vL, vR;
 volatile float batteryLevel = 0.;
+unsigned long lastTimeBattery = 0; // Zeitstempel des letzten Batterie-Checks
 hw_timer_t *timer = NULL;
 CRGB leds[NUM_LEDS];
 
@@ -78,13 +98,16 @@ void setup()
 
 
     // Fast Leds:  switch off all Leds!
-
     FastLED.addLeds<SK9822, DATA_PIN, CLOCK_PIN, RGB>(leds, NUM_LEDS);
+
+
+
 
     leds[0] = CRGB{0, 0, 0}; // R B G
     leds[1] = CRGB{0, 0, 0};
     leds[2] = CRGB{0, 0, 0};
     leds[3] = CRGB{0, 0, 0};
+
 
     FastLED.show();
 
@@ -94,7 +117,8 @@ void setup()
     }
 
     state = EEPROM.read(EEPROM_STATE);
-    
+
+
     if (state > STATE_MAX) state = STATE_START;
 
 
@@ -117,7 +141,9 @@ void loop()
             {   
                 for(j = N - i; (j > 0); j--) printf("z");
                 printf(" press ESC to wake me up and wait!    "); 
-                for(j = 0;      (j < i); j++) printf("z");
+
+                for(j = 0; (j < i); j++) printf("z");
+
                 printf("\r");
                 batteryLevel += analogRead(BATTERY_LEVEL) / REFV;
                 delay(60);
@@ -131,7 +157,9 @@ void loop()
             }
             if (data[0] != ESC)
             {
-//                batteryLevel = analogRead(BATTERY_LEVEL) / REFV;
+
+                // batteryLevel = analogRead(BATTERY_LEVEL) / REFV;
+
                 printf("battery:%1.3fV\n", batteryLevel);
                 enterDeepSleep();
             }    
@@ -144,6 +172,7 @@ void loop()
                 esp_restart();
             }
         break;
+
         case STATE_START:
              printf("!stART!\n");
              printf("To enter sleep mode, write 'sleep' via U-ART!\n");
@@ -151,6 +180,7 @@ void loop()
              vL = vR = 0;
              state = STATE_DRIVE;
         break;
+
         case STATE_DRIVE:
         break; 
     }
@@ -247,16 +277,52 @@ void IRAM_ATTR myTimer(void)
 
     dacWrite(DAC, ramp);
 
+
     if (count >= WAIT_ONE_SEC) 
     {
         flag = TRUE;
         count = 0;
     }
 
-
-    // PWM:
-
+    // PWM Steuerung für die Räder
     if (ramp >= vL) digitalWrite(WHEEL_L, LOW);  else digitalWrite(WHEEL_L, HIGH);
     if (ramp >= vR) digitalWrite(WHEEL_R, LOW);  else digitalWrite(WHEEL_R, HIGH);
 
+    // Batterie-Check im Timer Interrupt
+    batteryCheck();  // Aufruf der globalen Funktion
 }
+
+void batteryCheck()  // Definiert die Funktion außerhalb des Interrupt-Handlers
+{
+  static short counter = 0;
+  static int values = 0;
+
+  // Überprüfen, ob 5ms vergangen sind, bevor der nächste Batteriecheck durchgeführt wird
+  if (millis() - lastTimeBattery >= 5)
+  {
+    // Erhöhe den Zähler, wenn weniger als 200 Messungen gemacht wurden
+    if (counter < 200)
+    {
+      values += analogRead(ADC); // Liest den aktuellen Batteriewert vom ADC
+      counter++;
+    }
+    else if (counter == 200)
+    {
+      // Berechnet den Durchschnittswert der Messungen
+      if (values / counter < BATTERY_LOW)
+      {
+        // Wenn der Durchschnittswert unter dem festgelegten Wert für niedrige Batterie liegt, geht das System in den Schlafmodus
+        esp_sleep_enable_timer_wakeup(3600000); // 60 Minuten (in Millisekunden)
+        esp_deep_sleep_start(); // Setzt den Tiefschlafmodus in Gang
+      }
+
+      // Zurücksetzen der Variablen für die nächste Messung
+      counter = 0;
+      values = 0;
+    }
+
+    // Speichern der aktuellen Zeit für den nächsten Batteriecheck
+    lastTimeBattery = millis();
+  }
+}
+
