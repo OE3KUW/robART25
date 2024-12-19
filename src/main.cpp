@@ -69,6 +69,17 @@ volatile int vL, vR;
 volatile int LDir;
 volatile int RDir;
 volatile float batteryLevel = 0.;
+
+String receivedText = ""; // STring buffer
+String ssidFromEEPROM = "";
+String passwordFromEEPROM = "";
+String motorSysFromEEPROM = "";
+String receivedWord = "";
+
+volatile int motorSys = 0;
+volatile int deltaT = 0;
+
+
 hw_timer_t *timer = NULL;
 CRGB leds[NUM_LEDS];
 
@@ -200,7 +211,7 @@ void loop()
         break;
 
         case STATE_START:
-             printf("\n!stART!\n\n");
+             printf("\nstART\n\n");
              printf("To enter sleep mode, write SLEEP via U-ART!\n");
              printf("First, set the cursor in the monitor window!\n");
              vL = vR = 0;
@@ -361,7 +372,9 @@ void IRAM_ATTR myTimer(void)
     count++;
     ramp++;
 
-    dacWrite(DAC, ramp);
+    if(deltaT) deltaT--;
+
+    //dacWrite(DAC, ramp);
 
     if (count >= WAIT_ONE_SEC) 
     {
@@ -372,8 +385,19 @@ void IRAM_ATTR myTimer(void)
 
 
     // PWM:
+    if (motorSys == 0) 
+    {
+        if (ramp > vL) digitalWrite(WHEEL_L, LOW);  else digitalWrite(WHEEL_L, HIGH);
+        if (ramp > vR) digitalWrite(WHEEL_R, LOW);  else digitalWrite(WHEEL_R, HIGH);
+    }
+    if (motorSys == 1)
+    { 
+        if (LDir) if (ramp < vL) digitalWrite(WHEEL_L, LOW);  else digitalWrite(WHEEL_L, HIGH);
+        else      if (ramp > vL) digitalWrite(WHEEL_L, LOW);  else digitalWrite(WHEEL_L, HIGH);
 
-    if (ramp >= vL) digitalWrite(WHEEL_L, LOW);  else digitalWrite(WHEEL_L, HIGH);
-    if (ramp >= vR) digitalWrite(WHEEL_R, LOW);  else digitalWrite(WHEEL_R, HIGH);
+        if (RDir) if (ramp < vR) digitalWrite(WHEEL_R, LOW);  else digitalWrite(WHEEL_R, HIGH);
+        else      if (ramp > vR) digitalWrite(WHEEL_R, LOW);  else digitalWrite(WHEEL_R, HIGH);
+
+    }
 
 }
