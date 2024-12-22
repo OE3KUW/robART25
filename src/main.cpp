@@ -211,7 +211,7 @@ void loop()
         break;
 
         case STATE_START:
-             printf("\nstART\n\n");
+             printf("\nstART Power UP Version dec24\n\n");
              printf("To enter sleep mode, write SLEEP via U-ART!\n");
              printf("First, set the cursor in the monitor window!\n");
              vL = vR = 0;
@@ -337,7 +337,8 @@ void loop()
                 leds[3] = CRGB{255, 255, 0}; // MAGENTA
 
                 FastLED.show();
-
+                
+                receivedText = "";
 
 
             }
