@@ -145,7 +145,7 @@ void setup()
     if (state > STATE_MAX) state = STATE_START;
 
     ssidFromEEPROM = readFromEEPROM(EEPROM_SSID_ADDR);
-    printf("im EEPROM gefunden: .%s.\n", ssidFromEEPROM);
+    printf("im EEPROM gefunden ssid: .%s.\n", ssidFromEEPROM);
     passwordFromEEPROM = readFromEEPROM(EEPROM_PASSWORD_ADDR);
     printf("im PASSWORD gefunden: .%s.\n", passwordFromEEPROM);
     motorSysFromEEPROM = readFromEEPROM(EEPROM_MOTOR_SYS_ADDR);
@@ -156,8 +156,10 @@ void setup()
 //    printf("SSID: .%s.\n", ssidFromEEPROM);
 //    printf("PWD: .%s.\n", passwordFromEEPROM);
 
-
+    printf("-------------------------------------------------------------------\n");
+    printf("--   press ESC only, when the blue on-board-led is on ! ! !     ---\n");
     printf("-----Don't forget to set the cursor in the monitor window----------\n");
+    printf("-------------------------------------------------------------------\n");
 }  
 
 void loop() 
@@ -176,15 +178,28 @@ void loop()
             batteryLevel = 0;
             for(i = 0; (i < N); i++) 
             {   
-                for(j = N - i; (j > 0); j--) printf("z");
-                printf(" press ESC to wake me up and wait!    "); 
-
-                for(j = 0; (j < i); j++) printf("z");
-
-                printf("\r");
-                batteryLevel += analogRead(BATTERY_LEVEL) / REFV;
+                switch (i%4)
+                {
+                    case 0: printf("///"); break;
+                    case 1: printf("---"); break;
+                    case 2: printf("\\\\\\"); break;
+                    case 3: printf("|||"); break;
+                }
+                printf("  now, I can be waked up - press ESC !!!     "); 
+                
+                switch (i%4)
+                {
+                    case 0: printf("XXX"); break;
+                    case 1: printf("---"); break;
+                    case 2: printf("\\\\\\"); break;
+                    case 3: printf("|||"); break;
+                }
+                printf("\r"); 
+                
+                batteryLevel += (analogRead(BATTERY_LEVEL) / REFV);
                 delay(60);
             }           
+
             batteryLevel /= N; 
 
             if (Serial.available() > 0) {
@@ -197,7 +212,7 @@ void loop()
 
                 // batteryLevel = analogRead(BATTERY_LEVEL) / REFV;
 
-                printf("battery:%1.3fV\n", batteryLevel);
+                printf("\nbattery level : %1.3f V\n", batteryLevel);
                 enterDeepSleep();
             }    
             else
@@ -211,8 +226,9 @@ void loop()
         break;
 
         case STATE_START:
-             printf("\nstART Power UP Version dec24\n\n");
-             printf("To enter sleep mode, write SLEEP via U-ART!\n");
+             printf("\nstART Power UP Version jan25 - I am awoken!\n\n");
+
+             printf("To enter sleep mode: write SLEEP via U-ART!\n");
              printf("First, set the cursor in the monitor window!\n");
              vL = vR = 0;
              state = STATE_DRIVE;
@@ -226,7 +242,7 @@ void loop()
     {
         flag = 0; 
         batteryLevel = analogRead(BATTERY_LEVEL) / REFV;
-//###     printf("robART25 vL= %03d vR = %03d battery: %1.3fV\n", vL, vR, batteryLevel);
+//printf("robART25 vL= %03d vR = %03d battery: %1.3fV\n", vL, vR, batteryLevel);
     }
 
 // add sleep!
@@ -237,7 +253,7 @@ void loop()
         // Wenn ein Zeilenumbruch empfangen wird: Ausgabe und Text zurücksetzen
         if (receivedChar == '\n') 
         {
-            Serial.println("Empfangene Daten: ." + receivedText); 
+            Serial.println("Empfangene Daten: " + receivedText + "."); 
             receivedText = ""; // Textfeld zurücksetzen
         } 
         else 
@@ -276,6 +292,21 @@ void loop()
                 }
             }
 
+            if (receivedText == "M0") 
+            { 
+                printf("\nMotorsystem 0 will be stored!");
+
+                EEPROM.write(EEPROM_MOTOR_SYS_ADDR,'0');
+                EEPROM.commit();  // Änderungen speichern
+            }
+
+            if (receivedText == "M1") 
+            { 
+                printf("\nMotorsystem 1 will be stored!");
+
+                EEPROM.write(EEPROM_MOTOR_SYS_ADDR, '1');
+                EEPROM.commit();  // Änderungen speichern
+            }
 
             startIndex = receivedText.indexOf("\"motor-system\":\"");
                 //"motor-system":"   das sind 15 Zeichen!
@@ -287,8 +318,11 @@ void loop()
                 if (endIndex != -1)
                 {
                     receivedWord = receivedText.substring(startIndex, endIndex);
-                    printf("\nMotorsystem erkannt .%s.", receivedWord);
-                    store2EEPROM(receivedWord, EEPROM_MOTOR_SYS_ADDR);
+                    printf("\nMotorsystem erkannt .%c.", receivedWord[0]);
+                    //store2EEPROM(receivedWord, EEPROM_MOTOR_SYS_ADDR);
+
+                    EEPROM.write(EEPROM_MOTOR_SYS_ADDR, receivedWord[0]-'0');
+                    EEPROM.commit();  // Änderungen speichern
                 }
             }
 
@@ -337,14 +371,12 @@ void loop()
                 leds[3] = CRGB{255, 255, 0}; // MAGENTA
 
                 FastLED.show();
-                
-                receivedText = "";
-
-
             }
 
             if (receivedText == "SYS") 
             {
+                motorSysFromEEPROM = readFromEEPROM(EEPROM_MOTOR_SYS_ADDR);
+                motorSys = (char)motorSysFromEEPROM[0] - '0';
                 printf("MotorSystem: .%d.\n", motorSys);
                 printf("battery level: %f\n", batteryLevel);
                 printf("SSID: .%s.\n", ssidFromEEPROM);
@@ -365,7 +397,7 @@ void loop()
             }
             if (receivedText == "SLEEP") 
             {
-                printf(" z z z \n");
+                printf("Sleepmode will be activated! z z z \n");
                 state = STATE_SLEEP;
                 EEPROM.write(EEPROM_STATE, state);
                 EEPROM.commit();  // Änderungen speichern
@@ -373,6 +405,7 @@ void loop()
             }
         }
     }
+    
 }
 
 
